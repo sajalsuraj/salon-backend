@@ -1,7 +1,7 @@
 <?php
 use \Psr\Http\Message\ServerRequestInterface as Request;
 use \Psr\Http\Message\ResponseInterface as Response;
-require 'config.php';
+require 'config.php'; 
 require './vendor/autoload.php';
 
 header('Access-Control-Allow-Origin:*'); 
@@ -192,6 +192,27 @@ $app->get('/get/customers', function (Request $request, Response $response, arra
 
 });
 
+//Get customers page wise
+$app->get('/get/customers/{size}/{range}', function (Request $request, Response $response, array $args) {
+    var_dump($args['range']);
+    $db = getDB();
+    $sql = "select * from customer order by created_at desc limit ".$args['range'].",".$args['size'];
+    $stmt = $db->prepare($sql);
+    $stmt->execute();
+    $rowCount = $stmt->rowCount();
+    $customersList = $stmt->fetchAll(PDO::FETCH_OBJ);
+
+    if($rowCount > 0){
+        $response = array("status"=>true, "message"=>"Customers list", "data"=>$customersList);
+    }
+    else{
+        $response = array("status"=>false, "message"=>"Customers doesn't exist");
+    }
+
+    echo json_encode($response);
+
+});
+
 //Get all staffs
 $app->get('/get/staffs', function (Request $request, Response $response, array $args) {
 
@@ -228,6 +249,26 @@ $app->get('/get/services', function (Request $request, Response $response, array
     }
     else{
         $response = array("status"=>false, "message"=>"Services doesn't exist");
+    }
+
+    echo json_encode($response);
+
+});
+
+$app->get('/get/billings', function (Request $request, Response $response, array $args) {
+
+    $db = getDB(); 
+    $sql = "select table1.*, staff.name as staff from (select billing.*, customer.name as customer, customer.mobile as customer_mobile from billing left join customer on billing.customerId=customer.id) as table1, staff where table1.staffId=staff.id";
+    $stmt = $db->prepare($sql);
+    $stmt->execute();
+    $rowCount = $stmt->rowCount();
+    $servicesList = $stmt->fetchAll(PDO::FETCH_OBJ);
+
+    if($rowCount > 0){
+        $response = array("status"=>true, "message"=>"Bill list", "data"=>$servicesList);
+    }
+    else{
+        $response = array("status"=>false, "message"=>"Billings doesn't exist");
     }
 
     echo json_encode($response);
