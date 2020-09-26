@@ -141,6 +141,61 @@ $app->post('/add/service', function (Request $request, Response $response, array
 
 });
 
+//Edit service
+$app->put('/edit/service', function (Request $request, Response $response, array $args) {
+
+    $body = $request->getParsedBody();
+    
+    $db = getDB();
+
+    $insertSql = "update services set name=:name, price=:price where id=:id";
+    $stmtInsert = $db->prepare($insertSql);
+    $stmtInsert->bindParam("name", $body['name'], PDO::PARAM_STR);
+    $stmtInsert->bindParam("price", $body['price'], PDO::PARAM_STR);
+    $stmtInsert->bindParam("id", $body['id'], PDO::PARAM_STR);
+    $stmtInsert->execute();
+
+    $rowCount = $stmtInsert->rowCount();
+
+    if($rowCount > 0){
+        $response = array("status"=>true, "message"=>"Service updated successfully");
+    }
+    else{
+        $response = array("status"=>false, "message"=>"Error occurred while updating, please try again");
+    }
+
+    echo json_encode($response);
+
+});
+
+//Edit staff
+$app->put('/edit/staff', function (Request $request, Response $response, array $args) {
+    $body = $request->getParsedBody();
+    
+    $db = getDB();
+  
+    $insertSql = "update staff set name=:name, address=:address, aadhar=:aadhar, mobile=:mobile where id=:id";
+    $stmtInsert = $db->prepare($insertSql);
+    $stmtInsert->bindParam("name", $body['name'], PDO::PARAM_STR);
+    $stmtInsert->bindParam("address", $body['address'], PDO::PARAM_STR);
+    $stmtInsert->bindParam("aadhar", $body['aadhar'], PDO::PARAM_STR);
+    $stmtInsert->bindParam("mobile", $body['mobile'], PDO::PARAM_STR);
+    $stmtInsert->bindParam("id", $body['id'], PDO::PARAM_STR);
+    $stmtInsert->execute();
+
+    $rowCount = $stmtInsert->rowCount();
+
+    if($rowCount > 0){
+        $response = array("status"=>true, "message"=>"Staff updated successfully");
+    }
+    else{
+        $response = array("status"=>false, "message"=>"Error occurred while updating, please try again");
+    }
+
+    echo json_encode($response);
+
+});
+
 //Add bill
 $app->post('/add/bill', function (Request $request, Response $response, array $args) {
     $body = $request->getParsedBody();
@@ -194,7 +249,7 @@ $app->get('/get/customers', function (Request $request, Response $response, arra
 
 //Get customers page wise
 $app->get('/get/customers/{size}/{range}', function (Request $request, Response $response, array $args) {
-    var_dump($args['range']);
+
     $db = getDB();
     $sql = "select * from customer order by created_at desc limit ".$args['range'].",".$args['size'];
     $stmt = $db->prepare($sql);
@@ -249,6 +304,48 @@ $app->get('/get/services', function (Request $request, Response $response, array
     }
     else{
         $response = array("status"=>false, "message"=>"Services doesn't exist");
+    }
+
+    echo json_encode($response);
+
+});
+
+//Get service by ID
+$app->get('/get/service/{id}', function (Request $request, Response $response, array $args) {
+
+    $db = getDB();
+    $sql = "select * from services where id=".$args['id'];
+    $stmt = $db->prepare($sql);
+    $stmt->execute();
+    $rowCount = $stmt->rowCount();
+    $servicesList = $stmt->fetch(PDO::FETCH_OBJ);
+
+    if($rowCount > 0){
+        $response = array("status"=>true, "message"=>"Service data", "data"=>$servicesList);
+    }
+    else{
+        $response = array("status"=>false, "message"=>"Services doesn't exist");
+    }
+
+    echo json_encode($response);
+
+});
+
+//Get staff by id
+$app->get('/get/staff/{id}', function (Request $request, Response $response, array $args) {
+
+    $db = getDB();
+    $sql = "select * from staff where id=".$args['id'];
+    $stmt = $db->prepare($sql);
+    $stmt->execute();
+    $rowCount = $stmt->rowCount();
+    $staffData = $stmt->fetch(PDO::FETCH_OBJ);
+
+    if($rowCount > 0){
+        $response = array("status"=>true, "message"=>"Staff data", "data"=>$staffData);
+    }
+    else{
+        $response = array("status"=>false, "message"=>"Staff doesn't exist");
     }
 
     echo json_encode($response);
@@ -319,7 +416,6 @@ $app->post('/search/staff', function (Request $request, Response $response, arra
     }
 
     echo json_encode($response);
-
 });
 
 //Search all services
