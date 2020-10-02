@@ -578,4 +578,32 @@ $app->get('/get/summary', function (Request $request, Response $response, array 
 
 });
 
+//Get summary by date and month
+$app->get('/get/summary/{month}/{year}', function (Request $request, Response $response, array $args) {
+
+    $db = getDB(); 
+    $sql = "select year(created_at) as current_year,month(created_at) as current_month,sum(totalamount) as total
+    from billing where year(created_at)=:year and month(created_at)=:month
+    group by year(created_at),month(created_at)
+    order by year(created_at),month(created_at)";
+    $stmt = $db->prepare($sql);
+    $stmt->bindParam("year", $args['year'], PDO::PARAM_STR);
+    $stmt->bindParam("month", $args['month'], PDO::PARAM_STR);
+    $stmt->execute();
+    $rowCount = $stmt->rowCount();
+    $summary = $stmt->fetch(PDO::FETCH_OBJ);
+
+    $summary->current_month = date('F', mktime(0, 0, 0, $summary->current_month, 10));
+
+    if($rowCount > 0){
+        $response = array("status"=>true, "message"=>"Summary", "data"=>$summary);
+    }
+    else{
+        $response = array("status"=>false, "message"=>"Summary doesn't exist");
+    }
+
+    echo json_encode($response);
+
+});
+
 $app->run();
