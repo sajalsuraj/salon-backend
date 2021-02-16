@@ -1,6 +1,10 @@
 <?php
 use \Psr\Http\Message\ServerRequestInterface as Request;
 use \Psr\Http\Message\ResponseInterface as Response;
+
+use \Mike42\Escpos\Printer;
+use \Mike42\Escpos\PrintConnectors\WindowsPrintConnector;
+
 require 'config.php'; 
 require './vendor/autoload.php';
 
@@ -243,7 +247,7 @@ $app->post('/add/bill', function (Request $request, Response $response, array $a
     $lastid = $db->lastInsertId();
 
     if($lastid){
-        $response = array("status"=>true, "message"=>"Bill added successfully");
+        $response = array("status"=>true, "last_bill_id"=>$lastid, "message"=>"Bill added successfully");
     }
     else{
         $response = array("status"=>false, "message"=>"Error occurred while adding, please try again");
@@ -604,6 +608,67 @@ $app->get('/get/summary/{month}/{year}', function (Request $request, Response $r
 
     echo json_encode($response);
 
+});
+
+$app->get('/print/{billid}', function(Request $request, Response $response, array $args){
+    $db = getDB();
+    $sql = "select * from billing where id=".$args['billid'];
+    $stmt = $db->prepare($sql);
+    $stmt->execute();
+    $rowCount = $stmt->rowCount();
+    $billData = $stmt->fetch(PDO::FETCH_OBJ);
+    $totalAmount = 0;
+
+    $services = json_decode($billData->services);
+
+    try{
+        $connector = new WindowsPrintConnector("EPSON TM-T82 ReceiptSA4");
+        $printer = new Printer($connector);
+
+        $printer->text("------------------------------------------------\n");
+        $printer->text("                CURLS AND WAVES \n");
+        $printer->text("                PROFESSIONAL SALON \n");
+        $printer->text("            3RD FLOOR, MAHENDRA ARCADE\n");
+        $printer->text("                DALTONGANJ-822101\n");
+        $printer->text("              +91 6201662427\n");
+        $printer->text("------------------------------------------------\n");
+        $printer->text("Date:  ".date("h:s:m")."   Slip No:".$billData->id."\n\n");
+
+        $printer->text("------------------------------------------------\n");
+        $printer->text( "|".str_pad("S. No.",8, " ")."    |  ".str_pad("DESCRIPTION",19," ")." |".str_pad("QTY",8," ",STR_PAD_LEFT)." |".str_pad("PRICE",8," ",STR_PAD_LEFT)." |".str_pad("AMT",8," ",STR_PAD_LEFT)."|\n");
+        $printer->text("------------------------------------------------\n");
+        
+        foreach($services as $key=>$val){
+            $printer->text(str_pad($key+1,8, " ")."".str_pad($val->service_used->name,19," ")."".str_pad($val->quantity,8," ",STR_PAD_LEFT)."".str_pad($val->service_used->price,8," ",STR_PAD_LEFT)."".str_pad((float)$val->service_used->price * $val->quantity,8," ",STR_PAD_LEFT)."\n");
+            $totalAmount = $totalAmount + (float)$val->service_used->price * $val->quantity;
+        }
+
+        $printer -> text("\n\n");
+        $printer -> text("Total Amount                           ".str_pad(number_format($totalAmount, 2),10," ",STR_PAD_LEFT)."\n");
+        $printer -> text("Total Discount                           ".str_pad(number_format($billData->discount_applied, 2),10," ",STR_PAD_LEFT)."\n");
+        $printer -> text("Net Amount                          ".str_pad("₹".number_format($billData->totalamount, 2),10," ",STR_PAD_LEFT)."\n");
+        $printer -> text("------------------------------------------------\n");
+        $printer -> text("           Have a nice day          \n");
+        $printer -> text("------------------------------------------------\n");
+        
+        $printer -> cut();
+        $printer -> pulse();
+        
+        /* Close printer */
+        $printer -> close();
+    }
+    catch(Exception $e){
+        echo "Couldn't print to this printer: " . $e -> getMessage() . "\n";
+    }
+
+    // if($rowCount > 0){
+    //     $response = array("status"=>true, "message"=>"Billing data", "data"=>$billData);
+    // }
+    // else{
+    //     $response = array("status"=>false, "message"=>"Billing doesn't exist");
+    // }
+
+    // echo json_encode($response);
 });
 
 $app->run();

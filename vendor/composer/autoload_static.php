@@ -20,6 +20,10 @@ class ComposerStaticInit2de929b5e49d2a847e9e39d7d6d6f992
             'Psr\\Http\\Message\\' => 17,
             'Psr\\Container\\' => 14,
         ),
+        'M' => 
+        array (
+            'Mike42\\' => 7,
+        ),
         'F' => 
         array (
             'FastRoute\\' => 10,
@@ -38,6 +42,11 @@ class ComposerStaticInit2de929b5e49d2a847e9e39d7d6d6f992
         'Psr\\Container\\' => 
         array (
             0 => __DIR__ . '/..' . '/psr/container/src',
+        ),
+        'Mike42\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/mike42/escpos-php/src/Mike42',
+            1 => __DIR__ . '/..' . '/mike42/gfx-php/src/Mike42',
         ),
         'FastRoute\\' => 
         array (
