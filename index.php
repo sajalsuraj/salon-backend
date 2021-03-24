@@ -110,6 +110,43 @@ $app->post('/add/staff', function (Request $request, Response $response, array $
 
 });
 
+//Add new product
+$app->post('/add/product', function (Request $request, Response $response, array $args) {
+    $body = $request->getParsedBody();
+    
+    $db = getDB();
+    $sql = "select * from inventory where product_name='".$body['product_name']."'";
+    $stmt = $db->prepare($sql);
+    $stmt->execute();
+    $rowCount = $stmt->rowCount();
+
+    if($rowCount > 0){
+        $response = array("status"=>true, "message"=>"This product already exists");
+    }
+    else{
+        $insertSql = "insert into inventory(product_name, quantity, price)values(:name, :quantity, :price)";
+        $stmtInsert = $db->prepare($insertSql);
+        $stmtInsert->bindParam("name", $body['product_name'], PDO::PARAM_STR);
+        $stmtInsert->bindParam("quantity", $body['quantity'], PDO::PARAM_STR);
+        $stmtInsert->bindParam("price", $body['price'], PDO::PARAM_STR);
+        
+        $stmtInsert->execute();
+        
+
+        $lastid = $db->lastInsertId();
+
+        if($lastid){
+            $response = array("status"=>true, "message"=>"Product added successfully");
+        }
+        else{
+            $response = array("status"=>false, "message"=>"Error occurred while adding, please try again");
+        }
+    }
+
+    echo json_encode($response);
+
+});
+
 //Add new service
 $app->post('/add/service', function (Request $request, Response $response, array $args) {
     $body = $request->getParsedBody();
@@ -622,7 +659,7 @@ $app->get('/print/{billid}', function(Request $request, Response $response, arra
     $services = json_decode($billData->services);
 
     try{
-        $connector = new WindowsPrintConnector("EPSON TM-T82 ReceiptSA4");
+        $connector = new WindowsPrintConnector("EPSONTM-T82ReceiptSA4");
         $printer = new Printer($connector);
 
         $printer->text("------------------------------------------------\n");
@@ -632,23 +669,25 @@ $app->get('/print/{billid}', function(Request $request, Response $response, arra
         $printer->text("                DALTONGANJ-822101\n");
         $printer->text("              +91 6201662427\n");
         $printer->text("------------------------------------------------\n");
-        $printer->text("Date:  ".date("h:s:m")."   Slip No:".$billData->id."\n\n");
+        $printer->text(" Date:  ".date("d-m-Y")."   Slip No:".$billData->id."\n\n");
 
         $printer->text("------------------------------------------------\n");
-        $printer->text( "|".str_pad("S. No.",8, " ")."    |  ".str_pad("DESCRIPTION",19," ")." |".str_pad("QTY",8," ",STR_PAD_LEFT)." |".str_pad("PRICE",8," ",STR_PAD_LEFT)." |".str_pad("AMT",8," ",STR_PAD_LEFT)."|\n");
+        $printer->text( "| ".str_pad("S.No.",0, "")."| ".str_pad("DESCRIPTION",17," ",STR_PAD_BOTH)." | ".str_pad("QTY",2," ",STR_PAD_BOTH)." | ".str_pad("PRICE",2," ",STR_PAD_BOTH)." | ".str_pad("AMT",2," ",STR_PAD_BOTH)."|\n");
         $printer->text("------------------------------------------------\n");
         
         foreach($services as $key=>$val){
-            $printer->text(str_pad($key+1,8, " ")."".str_pad($val->service_used->name,19," ")."".str_pad($val->quantity,8," ",STR_PAD_LEFT)."".str_pad($val->service_used->price,8," ",STR_PAD_LEFT)."".str_pad((float)$val->service_used->price * $val->quantity,8," ",STR_PAD_LEFT)."\n");
+            $printer->text("  ".str_pad($key+1,0, "")."  ");
+            $printer->text(str_pad(wordwrap($val->service_used->name,23,"\n"),25," ", STR_PAD_RIGHT)." ");
+            $printer->text(str_pad($val->quantity,2," ",STR_PAD_BOTH)."  ".str_pad($val->service_used->price,3," ",STR_PAD_BOTH)."  ".str_pad((float)$val->service_used->price * $val->quantity,2," ",STR_PAD_BOTH)."\n");
             $totalAmount = $totalAmount + (float)$val->service_used->price * $val->quantity;
         }
 
         $printer -> text("\n\n");
-        $printer -> text("Total Amount                           ".str_pad(number_format($totalAmount, 2),10," ",STR_PAD_LEFT)."\n");
-        $printer -> text("Total Discount                           ".str_pad(number_format($billData->discount_applied, 2),10," ",STR_PAD_LEFT)."\n");
-        $printer -> text("Net Amount                          ".str_pad("₹".number_format($billData->totalamount, 2),10," ",STR_PAD_LEFT)."\n");
+        $printer -> text(" Total Amount                       ".str_pad(number_format($totalAmount, 2),10," ",STR_PAD_LEFT)."\n");
+        $printer -> text(" Total Discount                     ".str_pad(number_format($billData->discount_applied, 2),10," ",STR_PAD_LEFT)."\n");
+        $printer -> text(" Net Amount                       ".str_pad("Rs. ".number_format($billData->totalamount, 2),10," ",STR_PAD_LEFT)."\n");
         $printer -> text("------------------------------------------------\n");
-        $printer -> text("           Have a nice day          \n");
+        $printer -> text("                 Have a nice day          \n");
         $printer -> text("------------------------------------------------\n");
         
         $printer -> cut();
