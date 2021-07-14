@@ -265,30 +265,167 @@ $app->put('/edit/customer', function (Request $request, Response $response, arra
 
 });
 
-//Add bill
-$app->post('/add/bill', function (Request $request, Response $response, array $args) {
+//Edit Product
+$app->put('/edit/product', function (Request $request, Response $response, array $args) {
     $body = $request->getParsedBody();
     
     $db = getDB();
-    
-    $insertSql = "insert into billing(customerId, staffId, services, totalamount, discount_applied)values(:customerId, :staffId, :services, :totalamount, :discount_applied)";
+
+    $insertSql = "update inventory set product_name=:name, price=:price, quantity=:quantity where id=:id";
     $stmtInsert = $db->prepare($insertSql);
-    $stmtInsert->bindParam("customerId", $body['customerId'], PDO::PARAM_STR);
-    $stmtInsert->bindParam("staffId", $body['staffId'], PDO::PARAM_STR);
-    $stmtInsert->bindParam("services", $body['services'], PDO::PARAM_STR);
-    $stmtInsert->bindParam("totalamount", $body['totalamount'], PDO::PARAM_STR);
-    $stmtInsert->bindParam("discount_applied", $body['discount_applied'], PDO::PARAM_STR);
-    
+    $stmtInsert->bindParam("name", $body['product_name'], PDO::PARAM_STR);
+    $stmtInsert->bindParam("quantity", $body['quantity'], PDO::PARAM_STR);
+    $stmtInsert->bindParam("price", $body['price'], PDO::PARAM_STR);
+    $stmtInsert->bindParam("id", $body['id'], PDO::PARAM_STR);
     $stmtInsert->execute();
 
-    $lastid = $db->lastInsertId();
+    $rowCount = $stmtInsert->rowCount();
 
-    if($lastid){
-        $response = array("status"=>true, "last_bill_id"=>$lastid, "message"=>"Bill added successfully");
+    if($rowCount > 0){
+        $response = array("status"=>true, "message"=>"Service updated successfully");
     }
     else{
-        $response = array("status"=>false, "message"=>"Error occurred while adding, please try again");
+        $response = array("status"=>false, "message"=>"Error occurred while updating, please try again");
     }
+
+    echo json_encode($response);
+
+});
+
+//Edit Bill
+$app->put('/edit/bill', function (Request $request, Response $response, array $args) {
+    $body = $request->getParsedBody();
+    
+    $db = getDB();
+
+    $sql = "select * from customer where mobile='".$body['customerMobile']."'";
+    $stmt = $db->prepare($sql);
+    $stmt->execute();
+    $rowCount = $stmt->rowCount();
+    $customerData = $stmt->fetch(PDO::FETCH_OBJ);
+    $customerId = $customerData->id;
+
+    $isValid = true;
+    $products = json_decode($body['products']);
+
+    foreach ($products as $k => $v) {
+        if($v->quantity > (int)$v->product_used->quantity){
+            $isValid = false;
+            $response = array("status"=>false, "message"=>"Total number of ".$v->product_used->product_name." in stock is ".$v->product_used->quantity.". You can't add more than that.");
+            break;
+        }
+        else{
+            $quantityLeft = (int)$v->product_used->quantity - (int)$v->quantity;
+            $updateProductSql = "update inventory set quantity=:quantity where id=:id";
+            $stmtUpdateProduct = $db->prepare($updateProductSql);
+            $stmtUpdateProduct->bindParam("quantity", $quantityLeft, PDO::PARAM_STR);
+            $stmtUpdateProduct->bindParam("id", $v->product_used->id, PDO::PARAM_STR);
+            $stmtUpdateProduct->execute();
+        }
+    }
+
+    if($isValid){
+        $updateBillingSql = "update billing set customerId = :customerId, services = :services, products = :products, totalamount = :totalamount, discount_applied = :discount_applied where id = :id";
+        $stmtInsert = $db->prepare($updateBillingSql);
+
+        $stmtInsert->bindParam("customerId", $customerId, PDO::PARAM_STR);
+        $stmtInsert->bindParam("services", $body['services'], PDO::PARAM_STR);
+        if(count($products) > 0){
+            $stmtInsert->bindParam("products", $body['products'], PDO::PARAM_STR);
+        }
+        else{
+            $stmtInsert->bindValue("products", "", PDO::PARAM_STR);
+        }
+        $stmtInsert->bindParam("totalamount", $body['totalamount'], PDO::PARAM_STR);
+        $stmtInsert->bindParam("discount_applied", $body['discount_applied'], PDO::PARAM_STR);
+        $stmtInsert->bindParam("id", $body['id'], PDO::PARAM_STR);
+        $stmtInsert->execute();
+
+        $rowCount = $stmtInsert->rowCount();
+        if($rowCount > 0){
+            $response = array("status"=>true, "message"=>"Bill updated successfully");
+        }
+        else{
+            $response = array("status"=>false, "message"=>"Error occurred while adding, please try again");
+        }
+    }
+
+    echo json_encode($response);
+
+});
+
+//Add bill
+$app->post('/add/bill', function (Request $request, Response $response, array $args) {
+    $body = $request->getParsedBody();
+    $isValid = true;
+    
+    $db = getDB();
+
+    $sql = "select * from customer where mobile='".$body['customerMobile']."'";
+    $stmt = $db->prepare($sql);
+    $stmt->execute();
+    $rowCount = $stmt->rowCount();
+    $customerData = $stmt->fetch(PDO::FETCH_OBJ);
+    $customerId = "";
+
+    if($rowCount > 0){
+        $customerId = $customerData->id;
+    }
+    else{
+        $customerSql = "insert into customer(name, mobile)values(:name, :mobile)";
+        $stmtCustomer = $db->prepare($customerSql);
+        $stmtCustomer->bindParam("name", $body['customerName'], PDO::PARAM_STR);
+        $stmtCustomer->bindParam("mobile", $body['customerMobile'], PDO::PARAM_STR);
+        
+        $stmtCustomer->execute();
+        $customerId= $db->lastInsertId();
+
+    }
+
+    $products = json_decode($body['products']);
+
+    foreach ($products as $k => $v) {
+        if($v->quantity > (int)$v->product_used->quantity){
+            $isValid = false;
+            $response = array("status"=>false, "message"=>"Total number of ".$v->product_used->product_name." in stock is ".$v->product_used->quantity.". You can't add more than that.");
+            break;
+        }
+        else{
+            $quantityLeft = (int)$v->product_used->quantity - (int)$v->quantity;
+            $updateProductSql = "update inventory set quantity=:quantity where id=:id";
+            $stmtUpdateProduct = $db->prepare($updateProductSql);
+            $stmtUpdateProduct->bindParam("quantity", $quantityLeft, PDO::PARAM_STR);
+            $stmtUpdateProduct->bindParam("id", $v->product_used->id, PDO::PARAM_STR);
+            $stmtUpdateProduct->execute();
+        }
+    }
+    
+    if($isValid){
+        $insertSql = "insert into billing(customerId, services, products, totalamount, discount_applied)values(:customerId, :services, :products, :totalamount, :discount_applied)";
+        $stmtInsert = $db->prepare($insertSql);
+        $stmtInsert->bindParam("customerId", $customerId, PDO::PARAM_STR);
+        $stmtInsert->bindParam("services", $body['services'], PDO::PARAM_STR);
+        if(count($products) > 0){
+            $stmtInsert->bindParam("products", $body['products'], PDO::PARAM_STR);
+        }
+        else{
+            $stmtInsert->bindValue("products", "", PDO::PARAM_STR);
+        }
+        $stmtInsert->bindParam("totalamount", $body['totalamount'], PDO::PARAM_STR);
+        $stmtInsert->bindParam("discount_applied", $body['discount_applied'], PDO::PARAM_STR);
+        
+        $stmtInsert->execute();
+
+        $lastid = $db->lastInsertId();
+
+        if($lastid){
+            $response = array("status"=>true, "last_bill_id"=>$lastid, "message"=>"Bill added successfully");
+        }
+        else{
+            $response = array("status"=>false, "message"=>"Error occurred while adding, please try again");
+        }
+    }
+    
     
 
     echo json_encode($response);
@@ -379,6 +516,27 @@ $app->get('/get/services', function (Request $request, Response $response, array
 
 });
 
+//Get all products
+$app->get('/get/products', function (Request $request, Response $response, array $args) {
+
+    $db = getDB();
+    $sql = "select * from inventory order by created_at desc";
+    $stmt = $db->prepare($sql);
+    $stmt->execute();
+    $rowCount = $stmt->rowCount();
+    $servicesList = $stmt->fetchAll(PDO::FETCH_OBJ);
+
+    if($rowCount > 0){
+        $response = array("status"=>true, "message"=>"Product list", "data"=>$servicesList);
+    }
+    else{
+        $response = array("status"=>false, "message"=>"Products doesn't exist");
+    }
+
+    echo json_encode($response);
+
+});
+
 //Get service by ID
 $app->get('/get/service/{id}', function (Request $request, Response $response, array $args) {
 
@@ -394,6 +552,27 @@ $app->get('/get/service/{id}', function (Request $request, Response $response, a
     }
     else{
         $response = array("status"=>false, "message"=>"Services doesn't exist");
+    }
+
+    echo json_encode($response);
+
+});
+
+//Get product by ID
+$app->get('/get/product/{id}', function (Request $request, Response $response, array $args) {
+
+    $db = getDB();
+    $sql = "select * from inventory where id=".$args['id'];
+    $stmt = $db->prepare($sql);
+    $stmt->execute();
+    $rowCount = $stmt->rowCount();
+    $servicesList = $stmt->fetch(PDO::FETCH_OBJ);
+
+    if($rowCount > 0){
+        $response = array("status"=>true, "message"=>"Inventory data", "data"=>$servicesList);
+    }
+    else{
+        $response = array("status"=>false, "message"=>"Inventory doesn't exist");
     }
 
     echo json_encode($response);
@@ -436,6 +615,48 @@ $app->get('/get/customer/{id}', function (Request $request, Response $response, 
     }
     else{
         $response = array("status"=>false, "message"=>"Customer doesn't exist");
+    }
+
+    echo json_encode($response);
+
+});
+
+//Get bill by id
+$app->get('/get/bill/{id}', function (Request $request, Response $response, array $args) {
+
+    $db = getDB();
+    $sql = "select b.*, c.name, c.mobile from billing b left join customer c on c.id = b.customerId where b.id=".$args['id'];
+    $stmt = $db->prepare($sql);
+    $stmt->execute();
+    $rowCount = $stmt->rowCount();
+    $staffData = $stmt->fetch(PDO::FETCH_OBJ);
+
+    if($rowCount > 0){
+        $response = array("status"=>true, "message"=>"Billing data", "data"=>$staffData);
+    }
+    else{
+        $response = array("status"=>false, "message"=>"Billing doesn't exist");
+    }
+
+    echo json_encode($response);
+
+});
+
+//Get customer order history
+$app->get('/get/orderhistory/{customerid}', function (Request $request, Response $response, array $args) {
+
+    $db = getDB();
+    $sql = "select b.*, c.name, c.mobile from billing b left join customer c on c.id = b.customerId where c.id=".$args['customerid']." order by b.created_at desc";
+    $stmt = $db->prepare($sql);
+    $stmt->execute();
+    $rowCount = $stmt->rowCount();
+    $staffData = $stmt->fetchAll(PDO::FETCH_OBJ);
+
+    if($rowCount > 0){
+        $response = array("status"=>true, "message"=>"Customer order history data", "data"=>$staffData);
+    }
+    else{
+        $response = array("status"=>false, "message"=>"Customer order history doesn't exist");
     }
 
     echo json_encode($response);
@@ -502,10 +723,50 @@ $app->delete('/delete/service/{id}', function (Request $request, Response $respo
 
 });
 
+//delete product by id
+$app->delete('/delete/product/{id}', function (Request $request, Response $response, array $args) {
+
+    $db = getDB();
+    $sql = "delete from inventory where id=".$args['id'];
+    $stmt = $db->prepare($sql);
+    $stmt->execute();
+    $rowCount = $stmt->rowCount();
+
+    if($rowCount > 0){
+        $response = array("status"=>true, "message"=>"Product deleted successfully");
+    }
+    else{
+        $response = array("status"=>false, "message"=>"Product doesn't exist");
+    }
+
+    echo json_encode($response);
+
+});
+
+//delete bill by id
+$app->delete('/delete/bill/{id}', function (Request $request, Response $response, array $args) {
+
+    $db = getDB();
+    $sql = "delete from billing where id=".$args['id'];
+    $stmt = $db->prepare($sql);
+    $stmt->execute();
+    $rowCount = $stmt->rowCount();
+
+    if($rowCount > 0){
+        $response = array("status"=>true, "message"=>"Billing deleted successfully");
+    }
+    else{
+        $response = array("status"=>false, "message"=>"Billing doesn't exist");
+    }
+
+    echo json_encode($response);
+
+});
+
 $app->get('/get/billings', function (Request $request, Response $response, array $args) {
 
     $db = getDB(); 
-    $sql = "select table1.*, staff.name as staff from (select billing.*, customer.name as customer, customer.mobile as customer_mobile from billing left join customer on billing.customerId=customer.id) as table1, staff where table1.staffId=staff.id";
+    $sql = "select table1.* from (select billing.*, customer.name as customer, customer.mobile as customer_mobile from billing left join customer on billing.customerId=customer.id order by billing.created_at desc) as table1";
     $stmt = $db->prepare($sql);
     $stmt->execute();
     $rowCount = $stmt->rowCount();
@@ -592,9 +853,21 @@ $app->post('/search/service', function (Request $request, Response $response, ar
 
 });
 
+function checkIfObjectExistInArray($obj, $arr){
+    if(empty($arr)){
+        return false;
+    }
+    foreach ($arr as $key => $value) {
+        if($value->id === $obj->id){
+            return true;
+        }
+    }
+}
+
 $app->get('/get/summary', function (Request $request, Response $response, array $args) {
 
     $db = getDB(); 
+
     $sql = "select year(created_at) as current_year,month(created_at) as current_month,sum(totalamount) as total
     from billing where year(created_at)=:year and month(created_at)=:month
     group by year(created_at),month(created_at)
@@ -604,12 +877,63 @@ $app->get('/get/summary', function (Request $request, Response $response, array 
     $stmt->bindParam("month", date("m"), PDO::PARAM_STR);
     $stmt->execute();
     $rowCount = $stmt->rowCount();
+
+    $serviceSql = "select services from billing where year(created_at)=:year and month(created_at)=:month";
+    $serviceStmt = $db->prepare($serviceSql);
+    $serviceStmt->bindParam("year", date("Y"), PDO::PARAM_STR);
+    $serviceStmt->bindParam("month", date("m"), PDO::PARAM_STR);
+    $serviceStmt->execute();
+
     $summary = $stmt->fetch(PDO::FETCH_OBJ);
 
+    $services = $serviceStmt->fetchAll(PDO::FETCH_OBJ);
+    $serArr = [];
+    $empWiseServices = [];
+    foreach ($services as $key => $value) {
+        $serArr[] = json_decode($value->services);
+    }
     $summary->current_month = date('F', mktime(0, 0, 0, $summary->current_month, 10));
 
+    $tempEmpService = [];
+    foreach ($serArr as $key => $value) {
+        foreach ($value as $k1 => $v1) {
+            if(is_object($v1->staffId)){
+                if(!checkIfObjectExistInArray($v1->staffId, $empWiseServices)){
+                    $empWiseServices[] = $v1->staffId;
+                }
+            }
+            $tempEmpService[] = $v1;
+        }
+    }
+
+    foreach ($empWiseServices as $ky => $val) {
+        if($val != NULL){
+            $empService = [];
+            foreach ($tempEmpService as $k => $v) {
+                if($val->id === $v->staffId->id){
+                    $serObj = (object) [];
+                    $serObj->service_used = $v->service_used;
+                    $serObj->price = (int)$v->service_used->price * (int)$v->quantity;
+                    $empService[] = $serObj;
+                }
+            }
+            if(count($empService)>0){
+                $empWiseServices[$ky]->services = $empService;
+                $totalAmount = 0;
+                foreach ($empWiseServices[$ky]->services as $k2 => $v2) {
+                    $totalAmount += (int)$v2->price;
+                }
+                $empWiseServices[$ky]->total_amount_earned = $totalAmount;
+            }
+        }
+    }
+
+    if($empWiseServices[0] == NULL){
+        $empWiseServices = [];
+    }
+
     if($rowCount > 0){
-        $response = array("status"=>true, "message"=>"Summary", "data"=>$summary);
+        $response = array("status"=>true, "message"=>"Summary", "data"=>$summary, "emp_data"=>$empWiseServices);
     }
     else{
         $response = array("status"=>false, "message"=>"Summary doesn't exist");
@@ -634,10 +958,64 @@ $app->get('/get/summary/{month}/{year}', function (Request $request, Response $r
     $rowCount = $stmt->rowCount();
     $summary = $stmt->fetch(PDO::FETCH_OBJ);
 
+    $serviceSql = "select services from billing where year(created_at)=:year and month(created_at)=:month";
+    $serviceStmt = $db->prepare($serviceSql);
+    $serviceStmt->bindParam("year", $args['year'], PDO::PARAM_STR);
+    $serviceStmt->bindParam("month", $args['month'], PDO::PARAM_STR);
+    $serviceStmt->execute();
+
     $summary->current_month = date('F', mktime(0, 0, 0, $summary->current_month, 10));
 
+    $services = $serviceStmt->fetchAll(PDO::FETCH_OBJ);
+    $serArr = [];
+    foreach ($services as $key => $value) {
+        $serArr[] = json_decode($value->services);
+    }
+
+    $tempEmpService = [];
+    $empWiseServices = [];
+    foreach ($serArr as $key => $value) {
+        foreach ($value as $k1 => $v1) {
+            if(is_object($v1->staffId)){
+                if(!checkIfObjectExistInArray($v1->staffId, $empWiseServices)){
+                    $empWiseServices[] = $v1->staffId;
+                }
+            }
+            $tempEmpService[] = $v1;
+        }
+    }
+
+    if(!empty($empWiseServices)){
+        foreach ($empWiseServices as $ky => $val) {
+            if($val != NULL){
+                $empService = [];
+                foreach ($tempEmpService as $k => $v) {
+                    if($val->id === $v->staffId->id){
+                        $serObj = (object) [];
+                        $serObj->service_used = $v->service_used;
+                        $serObj->price = (int)$v->service_used->price * (int)$v->quantity;
+                        $empService[] = $serObj;
+                    }
+                }
+                if(count($empService)>0){
+                    $empWiseServices[$ky]->services = $empService;
+                    $totalAmount = 0;
+                    foreach ($empWiseServices[$ky]->services as $k2 => $v2) {
+                        $totalAmount += (int)$v2->price;
+                    }
+                    $empWiseServices[$ky]->total_amount_earned = $totalAmount;
+                }
+            }
+        }
+    }
+    
+    if($empWiseServices[0] == NULL){
+        $empWiseServices = [];
+    }
+    
+
     if($rowCount > 0){
-        $response = array("status"=>true, "message"=>"Summary", "data"=>$summary);
+        $response = array("status"=>true, "message"=>"Summary", "data"=>$summary, "emp_data"=>$empWiseServices);
     }
     else{
         $response = array("status"=>false, "message"=>"Summary doesn't exist");
@@ -656,7 +1034,7 @@ $app->get('/print/{billid}', function(Request $request, Response $response, arra
     $billData = $stmt->fetch(PDO::FETCH_OBJ);
     $totalAmount = 0;
 
-    $services = json_decode($billData->services);
+    $services = json_decode($billData->services);  $products = json_decode($billData->products);
 
     try{
         $connector = new WindowsPrintConnector("EPSONTM-T82ReceiptSA4");
@@ -676,10 +1054,16 @@ $app->get('/print/{billid}', function(Request $request, Response $response, arra
         $printer->text("------------------------------------------------\n");
         
         foreach($services as $key=>$val){
-            $printer->text("  ".str_pad($key+1,0, "")."  ");
-            $printer->text(str_pad(wordwrap($val->service_used->name,23,"\n"),25," ", STR_PAD_RIGHT)." ");
-            $printer->text(str_pad($val->quantity,2," ",STR_PAD_BOTH)."  ".str_pad($val->service_used->price,3," ",STR_PAD_BOTH)."  ".str_pad((float)$val->service_used->price * $val->quantity,2," ",STR_PAD_BOTH)."\n");
+            $printer->text("  ".str_pad($key+1,0, "")."  ".str_pad($val->service_used->name,25," ", STR_PAD_RIGHT)." ".str_pad($val->quantity,2," ",STR_PAD_BOTH)."  ".str_pad($val->service_used->price,3," ",STR_PAD_BOTH)."  ".str_pad((float)$val->service_used->price * $val->quantity,2," ",STR_PAD_BOTH)."\n");
             $totalAmount = $totalAmount + (float)$val->service_used->price * $val->quantity;
+        }
+
+	foreach($products as $key=>$val){
+            if($val != NULL){
+		$printer->text("  ".str_pad($key+1,0, "")."  ".str_pad($val->product_used->product_name,25," ", STR_PAD_RIGHT)." ".str_pad($val->quantity,2," ",STR_PAD_BOTH)."  ".str_pad($val->product_used->price,3," ",STR_PAD_BOTH)."  ".str_pad((float)$val->product_used->price * $val->quantity,2," ",STR_PAD_BOTH)."\n");
+                $totalAmount = $totalAmount + (float)$val->service_used->price * $val->quantity;
+	    }
+            
         }
 
         $printer -> text("\n\n");
