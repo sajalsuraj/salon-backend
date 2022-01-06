@@ -303,7 +303,20 @@ $app->put('/edit/bill', function (Request $request, Response $response, array $a
     $stmt->execute();
     $rowCount = $stmt->rowCount();
     $customerData = $stmt->fetch(PDO::FETCH_OBJ);
-    $customerId = $customerData->id;
+
+    if($rowCount > 0){
+        $customerId = $customerData->id;
+    }
+    else{
+        $customerSql = "insert into customer(name, mobile)values(:name, :mobile)";
+        $stmtCustomer = $db->prepare($customerSql);
+        $stmtCustomer->bindParam("name", $body['customerName'], PDO::PARAM_STR);
+        $stmtCustomer->bindParam("mobile", $body['customerMobile'], PDO::PARAM_STR);
+        
+        $stmtCustomer->execute();
+        $customerId= $db->lastInsertId();
+
+    }
 
     $isValid = true;
     $products = json_decode($body['products']);
@@ -325,7 +338,7 @@ $app->put('/edit/bill', function (Request $request, Response $response, array $a
     }
 
     if($isValid){
-        $updateBillingSql = "update billing set customerId = :customerId, services = :services, products = :products, totalamount = :totalamount, discount_applied = :discount_applied where id = :id";
+        $updateBillingSql = "update billing set customerId = :customerId, services = :services, products = :products, totalamount = :totalamount, discount_applied = :discount_applied, payment_mode = :payment_mode where id = :id";
         $stmtInsert = $db->prepare($updateBillingSql);
 
         $stmtInsert->bindParam("customerId", $customerId, PDO::PARAM_STR);
@@ -338,6 +351,7 @@ $app->put('/edit/bill', function (Request $request, Response $response, array $a
         }
         $stmtInsert->bindParam("totalamount", $body['totalamount'], PDO::PARAM_STR);
         $stmtInsert->bindParam("discount_applied", $body['discount_applied'], PDO::PARAM_STR);
+        $stmtInsert->bindParam("payment_mode", $body['payment_mode'], PDO::PARAM_STR);
         $stmtInsert->bindParam("id", $body['id'], PDO::PARAM_STR);
         $stmtInsert->execute();
 
@@ -372,10 +386,11 @@ $app->post('/add/bill', function (Request $request, Response $response, array $a
         $customerId = $customerData->id;
     }
     else{
-        $customerSql = "insert into customer(name, mobile)values(:name, :mobile)";
+        $customerSql = "insert into customer(name, mobile, birthday)values(:name, :mobile, :birthday)";
         $stmtCustomer = $db->prepare($customerSql);
         $stmtCustomer->bindParam("name", $body['customerName'], PDO::PARAM_STR);
         $stmtCustomer->bindParam("mobile", $body['customerMobile'], PDO::PARAM_STR);
+        $stmtCustomer->bindParam("birthday", $body['customerBirthday'], PDO::PARAM_STR);
         
         $stmtCustomer->execute();
         $customerId= $db->lastInsertId();
@@ -401,7 +416,7 @@ $app->post('/add/bill', function (Request $request, Response $response, array $a
     }
     
     if($isValid){
-        $insertSql = "insert into billing(customerId, services, products, totalamount, discount_applied)values(:customerId, :services, :products, :totalamount, :discount_applied)";
+        $insertSql = "insert into billing(customerId, services, products, totalamount, discount_applied, payment_mode)values(:customerId, :services, :products, :totalamount, :discount_applied, :payment_mode)";
         $stmtInsert = $db->prepare($insertSql);
         $stmtInsert->bindParam("customerId", $customerId, PDO::PARAM_STR);
         $stmtInsert->bindParam("services", $body['services'], PDO::PARAM_STR);
@@ -413,6 +428,7 @@ $app->post('/add/bill', function (Request $request, Response $response, array $a
         }
         $stmtInsert->bindParam("totalamount", $body['totalamount'], PDO::PARAM_STR);
         $stmtInsert->bindParam("discount_applied", $body['discount_applied'], PDO::PARAM_STR);
+        $stmtInsert->bindParam("payment_mode", $body['payment_mode'], PDO::PARAM_STR);
         
         $stmtInsert->execute();
 
@@ -516,6 +532,42 @@ $app->get('/get/services', function (Request $request, Response $response, array
 
 });
 
+function getBirthdayList($date, $month){
+    $db = getDB();
+    $sql = "select c.*, count(b.customerId) as total_services from customer c join billing b on c.id = b.customerId where month(c.birthday)=:month and dayofmonth(c.birthday)=:day group by c.id order by c.created_at desc";
+    $stmt = $db->prepare($sql);
+    $stmt->bindParam("day", $date, PDO::PARAM_STR);
+    $stmt->bindParam("month", $month, PDO::PARAM_STR);
+    $stmt->execute();
+    $todayBirthdayList = $stmt->fetchAll(PDO::FETCH_OBJ);
+
+    return $todayBirthdayList;
+}
+
+//Get customers by birthdays
+$app->get('/get/birthdays', function (Request $request, Response $response, array $args) {
+
+    $currentMonth = date('m');
+    $currentDate =  date('d');
+
+    $todayBirthdayList = getBirthdayList($currentDate, $currentMonth);
+
+    $nextDay = date('d', strtotime(' +1 day'));
+    $nextMonth = date('m', strtotime(' +1 day'));
+
+    $tomorrowBirthdayList = getBirthdayList($nextDay, $nextMonth);
+
+    $prevDay = date('d', strtotime(' -1 day'));
+    $prevMonth = date('m', strtotime(' -1 day'));
+
+    $yesterdayBirthdayList = getBirthdayList($prevDay, $prevMonth);
+
+    $response = array("status"=>true, "message"=>"Birthdays list", "today"=>$todayBirthdayList, "yesterday"=>$yesterdayBirthdayList, "tomorrow"=>$tomorrowBirthdayList);
+
+    echo json_encode($response);
+
+});
+
 //Get all products
 $app->get('/get/products', function (Request $request, Response $response, array $args) {
 
@@ -579,48 +631,6 @@ $app->get('/get/product/{id}', function (Request $request, Response $response, a
 
 });
 
-//Get staff by id
-$app->get('/get/staff/{id}', function (Request $request, Response $response, array $args) {
-
-    $db = getDB();
-    $sql = "select * from staff where id=".$args['id'];
-    $stmt = $db->prepare($sql);
-    $stmt->execute();
-    $rowCount = $stmt->rowCount();
-    $staffData = $stmt->fetch(PDO::FETCH_OBJ);
-
-    if($rowCount > 0){
-        $response = array("status"=>true, "message"=>"Staff data", "data"=>$staffData);
-    }
-    else{
-        $response = array("status"=>false, "message"=>"Staff doesn't exist");
-    }
-
-    echo json_encode($response);
-
-});
-
-//Get customer by id
-$app->get('/get/customer/{id}', function (Request $request, Response $response, array $args) {
-
-    $db = getDB();
-    $sql = "select * from customer where id=".$args['id'];
-    $stmt = $db->prepare($sql);
-    $stmt->execute();
-    $rowCount = $stmt->rowCount();
-    $staffData = $stmt->fetch(PDO::FETCH_OBJ);
-
-    if($rowCount > 0){
-        $response = array("status"=>true, "message"=>"Customer data", "data"=>$staffData);
-    }
-    else{
-        $response = array("status"=>false, "message"=>"Customer doesn't exist");
-    }
-
-    echo json_encode($response);
-
-});
-
 //Get bill by id
 $app->get('/get/bill/{id}', function (Request $request, Response $response, array $args) {
 
@@ -657,6 +667,48 @@ $app->get('/get/orderhistory/{customerid}', function (Request $request, Response
     }
     else{
         $response = array("status"=>false, "message"=>"Customer order history doesn't exist");
+    }
+
+    echo json_encode($response);
+
+});
+
+//Get staff by id
+$app->get('/get/staff/{id}', function (Request $request, Response $response, array $args) {
+
+    $db = getDB();
+    $sql = "select * from staff where id=".$args['id'];
+    $stmt = $db->prepare($sql);
+    $stmt->execute();
+    $rowCount = $stmt->rowCount();
+    $staffData = $stmt->fetch(PDO::FETCH_OBJ);
+
+    if($rowCount > 0){
+        $response = array("status"=>true, "message"=>"Staff data", "data"=>$staffData);
+    }
+    else{
+        $response = array("status"=>false, "message"=>"Staff doesn't exist");
+    }
+
+    echo json_encode($response);
+
+});
+
+//Get customer by id
+$app->get('/get/customer/{id}', function (Request $request, Response $response, array $args) {
+
+    $db = getDB();
+    $sql = "select * from customer where id=".$args['id'];
+    $stmt = $db->prepare($sql);
+    $stmt->execute();
+    $rowCount = $stmt->rowCount();
+    $staffData = $stmt->fetch(PDO::FETCH_OBJ);
+
+    if($rowCount > 0){
+        $response = array("status"=>true, "message"=>"Customer data", "data"=>$staffData);
+    }
+    else{
+        $response = array("status"=>false, "message"=>"Customer doesn't exist");
     }
 
     echo json_encode($response);
@@ -766,7 +818,7 @@ $app->delete('/delete/bill/{id}', function (Request $request, Response $response
 $app->get('/get/billings', function (Request $request, Response $response, array $args) {
 
     $db = getDB(); 
-    $sql = "select table1.* from (select billing.*, customer.name as customer, customer.mobile as customer_mobile from billing left join customer on billing.customerId=customer.id order by billing.created_at desc) as table1";
+    $sql = "select table1.* from (select billing.*, customer.name as customer, customer.mobile as customer_mobile from billing left join customer on billing.customerId=customer.id) as table1 ORDER BY table1.created_at DESC";
     $stmt = $db->prepare($sql);
     $stmt->execute();
     $rowCount = $stmt->rowCount();
@@ -868,7 +920,7 @@ $app->get('/get/summary', function (Request $request, Response $response, array 
 
     $db = getDB(); 
 
-    $sql = "select year(created_at) as current_year,month(created_at) as current_month,sum(totalamount) as total
+    $sql = "select year(created_at) as current_year,month(created_at) as current_month,sum(totalamount) as total, sum(discount_applied) as total_discount
     from billing where year(created_at)=:year and month(created_at)=:month
     group by year(created_at),month(created_at)
     order by year(created_at),month(created_at)";
@@ -914,16 +966,26 @@ $app->get('/get/summary', function (Request $request, Response $response, array 
                     $serObj = (object) [];
                     $serObj->service_used = $v->service_used;
                     $serObj->price = (int)$v->service_used->price * (int)$v->quantity;
+                    if($v->discount){
+                        $serObj->discount = (int)$v->discount;
+                    }
+                    else{
+                        $serObj->discount = 0;
+                    }
                     $empService[] = $serObj;
                 }
             }
+
             if(count($empService)>0){
                 $empWiseServices[$ky]->services = $empService;
                 $totalAmount = 0;
+                $totalDiscount = 0;
                 foreach ($empWiseServices[$ky]->services as $k2 => $v2) {
                     $totalAmount += (int)$v2->price;
+                    $totalDiscount += (int) $v2->discount;
                 }
-                $empWiseServices[$ky]->total_amount_earned = $totalAmount;
+                $empWiseServices[$ky]->total_discount = $totalDiscount;
+                $empWiseServices[$ky]->total_amount_earned = $totalAmount - $totalDiscount;
             }
         }
     }
@@ -947,7 +1009,7 @@ $app->get('/get/summary', function (Request $request, Response $response, array 
 $app->get('/get/summary/{month}/{year}', function (Request $request, Response $response, array $args) {
 
     $db = getDB(); 
-    $sql = "select year(created_at) as current_year,month(created_at) as current_month,sum(totalamount) as total
+    $sql = "select year(created_at) as current_year,month(created_at) as current_month,sum(totalamount) as total, sum(discount_applied) as total_discount
     from billing where year(created_at)=:year and month(created_at)=:month
     group by year(created_at),month(created_at)
     order by year(created_at),month(created_at)";
@@ -985,6 +1047,7 @@ $app->get('/get/summary/{month}/{year}', function (Request $request, Response $r
         }
     }
 
+
     if(!empty($empWiseServices)){
         foreach ($empWiseServices as $ky => $val) {
             if($val != NULL){
@@ -994,16 +1057,25 @@ $app->get('/get/summary/{month}/{year}', function (Request $request, Response $r
                         $serObj = (object) [];
                         $serObj->service_used = $v->service_used;
                         $serObj->price = (int)$v->service_used->price * (int)$v->quantity;
+                        if($v->discount){
+                            $serObj->discount = (int)$v->discount;
+                        }
+                        else{
+                            $serObj->discount = 0;
+                        }
                         $empService[] = $serObj;
                     }
                 }
                 if(count($empService)>0){
                     $empWiseServices[$ky]->services = $empService;
                     $totalAmount = 0;
+                    $totalDiscount = 0;
                     foreach ($empWiseServices[$ky]->services as $k2 => $v2) {
                         $totalAmount += (int)$v2->price;
+                        $totalDiscount += (int) $v2->discount;
                     }
-                    $empWiseServices[$ky]->total_amount_earned = $totalAmount;
+                    $empWiseServices[$ky]->total_discount = $totalDiscount;
+                    $empWiseServices[$ky]->total_amount_earned = $totalAmount - $totalDiscount;
                 }
             }
         }
@@ -1023,6 +1095,100 @@ $app->get('/get/summary/{month}/{year}', function (Request $request, Response $r
 
     echo json_encode($response);
 
+});
+
+
+$app->post('/get/summary/date', function(Request $request, Response $response, array $args){
+    $body = $request->getParsedBody();
+    $db = getDB(); 
+
+    $sql = "select t1.*, year(t1.date_selected) as current_year, month(t1.date_selected) as current_month from (select sum(totalamount) as total, sum(discount_applied) as total_discount, date(created_at) as date_selected from billing where date(created_at)=:date group by date(created_at) order by date(created_at) desc) t1";
+    $stmt = $db->prepare($sql);
+    $stmt->bindParam("date", $body['date'], PDO::PARAM_STR);
+    $stmt->execute();
+    $rowCount = $stmt->rowCount();
+
+    $summary = $stmt->fetch(PDO::FETCH_OBJ);
+
+    $serviceSql = "select services from billing where date(created_at)=:date";
+    $serviceStmt = $db->prepare($serviceSql);
+    $serviceStmt->bindParam("date", $body['date'], PDO::PARAM_STR);
+    $serviceStmt->execute();
+
+    $services = $serviceStmt->fetchAll(PDO::FETCH_OBJ);
+    $serArr = [];
+    $empWiseServices = [];
+    foreach ($services as $key => $value) {
+        $serArr[] = json_decode($value->services);
+    }
+    $summary->current_month = date('F', mktime(0, 0, 0, $summary->current_month, 10));
+
+    $tempEmpService = [];
+    foreach ($serArr as $key => $value) {
+        foreach ($value as $k1 => $v1) {
+            if(is_object($v1->staffId)){
+                if(!checkIfObjectExistInArray($v1->staffId, $empWiseServices)){
+                    $empWiseServices[] = $v1->staffId;
+                }
+            }
+            $tempEmpService[] = $v1;
+        }
+    }
+
+    foreach ($empWiseServices as $ky => $val) {
+        if($val != NULL){
+            $empService = [];
+            foreach ($tempEmpService as $k => $v) {
+                if($val->id === $v->staffId->id){
+                    $serObj = (object) [];
+                    $serObj->service_used = $v->service_used;
+                    $serObj->price = (int)$v->service_used->price * (int)$v->quantity;
+                    if($v->discount){
+                        $serObj->discount = (int)$v->discount;
+                    }
+                    else{
+                        $serObj->discount = 0;
+                    }
+                    $empService[] = $serObj;
+                }
+            }
+            if(count($empService)>0){
+                $empWiseServices[$ky]->services = $empService;
+                $totalAmount = 0;
+                $totalDiscount = 0;
+                foreach ($empWiseServices[$ky]->services as $k2 => $v2) {
+                    $totalAmount += (int)$v2->price;
+                    $totalDiscount += (int) $v2->discount;
+                }
+                $empWiseServices[$ky]->total_discount = $totalDiscount;
+                $empWiseServices[$ky]->total_amount_earned = $totalAmount - $totalDiscount;
+            }
+        }
+    }
+
+    if($empWiseServices[0] == NULL){
+        $empWiseServices = [];
+    }
+
+    if($rowCount > 0){
+        $response = array("status"=>true, "message"=>"Summary", "data"=>$summary, "emp_data"=>$empWiseServices);
+    }
+    else{
+        $response = array("status"=>false, "message"=>"Summary doesn't exist");
+    }
+
+    echo json_encode($response);
+});
+
+$app->get('/get/backup', function(Request $request, Response $response, array $args){
+    $db = getDB();
+    $sql = "show tables";
+    $stmt = $db->prepare($sql);
+    $stmt->execute();
+    $rowCount = $stmt->rowCount();
+    $allTables = $stmt->fetchAll(PDO::FETCH_OBJ);
+
+    echo json_encode($allTables);
 });
 
 $app->get('/print/{billid}', function(Request $request, Response $response, array $args){

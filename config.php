@@ -4,9 +4,9 @@ error_reporting(0);
 session_start();
 
 /* DATABASE CONFIGURATION */
-define('DB_SERVER', 'localhost:8889');
-define('DB_USERNAME', 'root');
-define('DB_PASSWORD', 'root');
+define('DB_SERVER', 'localhost');
+define('DB_USERNAME', 'sajal');
+define('DB_PASSWORD', 'sajal123');
 define('DB_DATABASE', 'salon');
 
 function getDB() 
