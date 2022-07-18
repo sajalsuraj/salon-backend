@@ -338,7 +338,7 @@ $app->put('/edit/bill', function (Request $request, Response $response, array $a
     }
 
     if($isValid){
-        $updateBillingSql = "update billing set customerId = :customerId, services = :services, products = :products, totalamount = :totalamount, discount_applied = :discount_applied, payment_mode = :payment_mode where id = :id";
+        $updateBillingSql = "update billing set customerId = :customerId, services = :services, products = :products, totalamount = :totalamount, service_total=:service_total, product_total=:product_total, discount_applied = :discount_applied, payment_mode = :payment_mode where id = :id";
         $stmtInsert = $db->prepare($updateBillingSql);
 
         $stmtInsert->bindParam("customerId", $customerId, PDO::PARAM_STR);
@@ -350,6 +350,8 @@ $app->put('/edit/bill', function (Request $request, Response $response, array $a
             $stmtInsert->bindValue("products", "", PDO::PARAM_STR);
         }
         $stmtInsert->bindParam("totalamount", $body['totalamount'], PDO::PARAM_STR);
+        $stmtInsert->bindParam("service_total", $body['service_total'], PDO::PARAM_STR);
+        $stmtInsert->bindParam("product_total", $body['product_total'], PDO::PARAM_STR);
         $stmtInsert->bindParam("discount_applied", $body['discount_applied'], PDO::PARAM_STR);
         $stmtInsert->bindParam("payment_mode", $body['payment_mode'], PDO::PARAM_STR);
         $stmtInsert->bindParam("id", $body['id'], PDO::PARAM_STR);
@@ -384,11 +386,19 @@ $app->post('/add/bill', function (Request $request, Response $response, array $a
 
     if($rowCount > 0){
         $customerId = $customerData->id;
+        if(($customerData->birthday === "") && ($body['customerBirthday'] !== "")){
+            $insertSql = "update customer set birthday=:birthday where id=:id";
+            $stmtInsert = $db->prepare($insertSql);
+            $stmtInsert->bindParam("birthday", $body['customerBirthday'], PDO::PARAM_STR);
+            $stmtInsert->bindParam("id", $customerId, PDO::PARAM_STR);
+            $stmtInsert->execute();
+        }
     }
     else{
         $customerSql = "insert into customer(name, mobile, birthday)values(:name, :mobile, :birthday)";
+        $customerName = ucfirst($body['customerName']);
         $stmtCustomer = $db->prepare($customerSql);
-        $stmtCustomer->bindParam("name", $body['customerName'], PDO::PARAM_STR);
+        $stmtCustomer->bindParam("name", $customerName, PDO::PARAM_STR);
         $stmtCustomer->bindParam("mobile", $body['customerMobile'], PDO::PARAM_STR);
         $stmtCustomer->bindParam("birthday", $body['customerBirthday'], PDO::PARAM_STR);
         
@@ -416,7 +426,7 @@ $app->post('/add/bill', function (Request $request, Response $response, array $a
     }
     
     if($isValid){
-        $insertSql = "insert into billing(customerId, services, products, totalamount, discount_applied, payment_mode)values(:customerId, :services, :products, :totalamount, :discount_applied, :payment_mode)";
+        $insertSql = "insert into billing(customerId, services, products, totalamount, service_total, product_total, discount_applied, payment_mode)values(:customerId, :services, :products, :totalamount, :service_total, :product_total, :discount_applied, :payment_mode)";
         $stmtInsert = $db->prepare($insertSql);
         $stmtInsert->bindParam("customerId", $customerId, PDO::PARAM_STR);
         $stmtInsert->bindParam("services", $body['services'], PDO::PARAM_STR);
@@ -426,7 +436,12 @@ $app->post('/add/bill', function (Request $request, Response $response, array $a
         else{
             $stmtInsert->bindValue("products", "", PDO::PARAM_STR);
         }
+
+        $service_total = (int) $body['service_total'] - (int) $body['discount_applied'];
+
         $stmtInsert->bindParam("totalamount", $body['totalamount'], PDO::PARAM_STR);
+        $stmtInsert->bindParam("service_total", $service_total, PDO::PARAM_STR);
+        $stmtInsert->bindParam("product_total", $body['product_total'], PDO::PARAM_STR);
         $stmtInsert->bindParam("discount_applied", $body['discount_applied'], PDO::PARAM_STR);
         $stmtInsert->bindParam("payment_mode", $body['payment_mode'], PDO::PARAM_STR);
         
@@ -534,7 +549,7 @@ $app->get('/get/services', function (Request $request, Response $response, array
 
 function getBirthdayList($date, $month){
     $db = getDB();
-    $sql = "select c.*, count(b.customerId) as total_services from customer c join billing b on c.id = b.customerId where month(c.birthday)=:month and dayofmonth(c.birthday)=:day group by c.id order by c.created_at desc";
+    $sql = "select c.*, count(b.customerId) as total_services from customer c left join billing b on c.id = b.customerId where month(c.birthday)=:month and dayofmonth(c.birthday)=:day group by c.id order by c.created_at desc";
     $stmt = $db->prepare($sql);
     $stmt->bindParam("day", $date, PDO::PARAM_STR);
     $stmt->bindParam("month", $month, PDO::PARAM_STR);
@@ -543,6 +558,20 @@ function getBirthdayList($date, $month){
 
     return $todayBirthdayList;
 }
+
+//Get customer birthdays by month
+$app->get('/get/birthdays/{month}', function (Request $request, Response $response, array $args) {
+    $db = getDB();
+    $sql = "select c.*, count(b.customerId) as total_services from customer c left join billing b on c.id = b.customerId where month(c.birthday)=:month group by c.id order by dayofmonth(c.birthday)";
+    $stmt = $db->prepare($sql);
+    $stmt->bindParam("month", $args['month'], PDO::PARAM_STR);
+    $stmt->execute();
+    $birthdayList = $stmt->fetchAll(PDO::FETCH_OBJ);
+
+    $response = array("status"=>true, "message"=>"Birthdays list", "data"=>$birthdayList);
+
+    echo json_encode($response);
+});
 
 //Get customers by birthdays
 $app->get('/get/birthdays', function (Request $request, Response $response, array $args) {
@@ -920,7 +949,7 @@ $app->get('/get/summary', function (Request $request, Response $response, array 
 
     $db = getDB(); 
 
-    $sql = "select year(created_at) as current_year,month(created_at) as current_month,sum(totalamount) as total, sum(discount_applied) as total_discount
+    $sql = "select year(created_at) as current_year,month(created_at) as current_month,sum(totalamount) as total, sum(service_total) as service_total, sum(product_total) as product_total, sum(discount_applied) as total_discount
     from billing where year(created_at)=:year and month(created_at)=:month
     group by year(created_at),month(created_at)
     order by year(created_at),month(created_at)";
@@ -1009,7 +1038,7 @@ $app->get('/get/summary', function (Request $request, Response $response, array 
 $app->get('/get/summary/{month}/{year}', function (Request $request, Response $response, array $args) {
 
     $db = getDB(); 
-    $sql = "select year(created_at) as current_year,month(created_at) as current_month,sum(totalamount) as total, sum(discount_applied) as total_discount
+    $sql = "select year(created_at) as current_year,month(created_at) as current_month,sum(totalamount) as total, sum(service_total) as service_total, sum(product_total) as product_total, sum(discount_applied) as total_discount
     from billing where year(created_at)=:year and month(created_at)=:month
     group by year(created_at),month(created_at)
     order by year(created_at),month(created_at)";
@@ -1102,7 +1131,7 @@ $app->post('/get/summary/date', function(Request $request, Response $response, a
     $body = $request->getParsedBody();
     $db = getDB(); 
 
-    $sql = "select t1.*, year(t1.date_selected) as current_year, month(t1.date_selected) as current_month from (select sum(totalamount) as total, sum(discount_applied) as total_discount, date(created_at) as date_selected from billing where date(created_at)=:date group by date(created_at) order by date(created_at) desc) t1";
+    $sql = "select t1.*, year(t1.date_selected) as current_year, month(t1.date_selected) as current_month from (select sum(totalamount) as total, sum(discount_applied) as total_discount, sum(service_total) as service_total, sum(product_total) as product_total, date(created_at) as date_selected from billing where date(created_at)=:date group by date(created_at) order by date(created_at) desc) t1";
     $stmt = $db->prepare($sql);
     $stmt->bindParam("date", $body['date'], PDO::PARAM_STR);
     $stmt->execute();
