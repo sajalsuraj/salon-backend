@@ -236,10 +236,11 @@ $app->post('/add/expense', function (
     $db = getDB();
 
     $insertSql =
-        'insert into expenses(expense_name, price)values(:name, :price)';
+        'insert into expenses(expense_name, price, created_at)values(:name, :price, :created_at)';
     $stmtInsert = $db->prepare($insertSql);
     $stmtInsert->bindParam('name', $body['expense_name'], PDO::PARAM_STR);
     $stmtInsert->bindParam('price', $body['price'], PDO::PARAM_STR);
+    $stmtInsert->bindParam('created_at', $body['created_at'], PDO::PARAM_STR);
 
     $stmtInsert->execute();
 
@@ -305,10 +306,11 @@ $app->put('/edit/expense', function (
     $db = getDB();
 
     $insertSql =
-        'update expenses set expense_name=:name, price=:price where id=:id';
+        'update expenses set expense_name=:name, price=:price, created_at=:created_at where id=:id';
     $stmtInsert = $db->prepare($insertSql);
     $stmtInsert->bindParam('name', $body['expense_name'], PDO::PARAM_STR);
     $stmtInsert->bindParam('price', $body['price'], PDO::PARAM_STR);
+    $stmtInsert->bindParam('created_at', $body['created_at'], PDO::PARAM_STR);
     $stmtInsert->bindParam('id', $body['id'], PDO::PARAM_STR);
     $stmtInsert->execute();
 
@@ -1592,6 +1594,28 @@ $app->get('/get/summary/{month}/{year}', function (
     );
 
     $services = $serviceStmt->fetchAll(PDO::FETCH_OBJ);
+
+    $expenseSql =
+        'select sum(price) as totalexpense, year(created_at) as year, month(created_at) as month from expenses where year(created_at)=:year and month(created_at)=:month group by year(created_at),month(created_at) order by year(created_at),month(created_at)';
+    $expenseStmt = $db->prepare($expenseSql);
+    $expenseStmt->bindParam('year', $args['year'], PDO::PARAM_STR);
+    $expenseStmt->bindParam('month', $args['month'], PDO::PARAM_STR);
+    $expenseStmt->execute();
+
+    $expenses = $expenseStmt->fetch(PDO::FETCH_OBJ);
+
+    if ($summary && $expenses) {
+        $summary->total =
+            (float) $summary->total - (float) $expenses->totalexpense;
+    }
+
+    if($expenses){
+        $expenses->month = date(
+            'F',
+            mktime(0, 0, 0, $expenses->month, 10)
+        );
+    }
+
     $serArr = [];
     foreach ($services as $key => $value) {
         $serArr[] = json_decode($value->services);
@@ -1655,10 +1679,11 @@ $app->get('/get/summary/{month}/{year}', function (
             'status' => true,
             'message' => 'Summary',
             'data' => $summary,
+            'expenses' => $expenses,
             'emp_data' => $empWiseServices,
         ];
     } else {
-        $response = ['status' => false, 'message' => "Summary doesn't exist"];
+        $response = ['status' => false, 'expenses' => $expenses, 'message' => "Summary doesn't exist"];
     }
 
     echo json_encode($response);
@@ -1687,6 +1712,25 @@ $app->post('/get/summary/date', function (
     $serviceStmt->execute();
 
     $services = $serviceStmt->fetchAll(PDO::FETCH_OBJ);
+    $expenseSql =
+        'select t1.totalexpense, year(t1.date_selected) as year, month(t1.date_selected) as month from (select sum(price) as totalexpense, date(created_at) as date_selected from expenses where date(created_at)=:date group by date(created_at) order by date(created_at)) t1';
+    $expenseStmt = $db->prepare($expenseSql);
+    $expenseStmt->bindParam('date', $body['date'], PDO::PARAM_STR);
+    $expenseStmt->execute();
+
+    $expenses = $expenseStmt->fetch(PDO::FETCH_OBJ);
+
+    if ($summary && $expenses) {
+        $summary->total =
+            (float) $summary->total - (float) $expenses->totalexpense;
+    }
+
+    if($expenses){
+        $expenses->month = date(
+            'F',
+            mktime(0, 0, 0, $expenses->month, 10)
+        );
+    }
     $serArr = [];
     $empWiseServices = [];
     foreach ($services as $key => $value) {
@@ -1752,10 +1796,11 @@ $app->post('/get/summary/date', function (
             'status' => true,
             'message' => 'Summary',
             'data' => $summary,
+            'expenses' => $expenses,
             'emp_data' => $empWiseServices,
         ];
     } else {
-        $response = ['status' => false, 'message' => "Summary doesn't exist"];
+        $response = ['status' => false, 'expenses' => $expenses, 'message' => "Summary doesn't exist"];
     }
 
     echo json_encode($response);
