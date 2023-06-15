@@ -512,15 +512,14 @@ $app->put('/edit/bill', function (
     }
 
     if ($isValid) {
-        if($body['created_at']){
+        if ($body['created_at']) {
             $updateBillingSql =
-            'update billing set customerId = :customerId, services = :services, products = :products, totalamount = :totalamount, service_total=:service_total, product_total=:product_total, discount_applied = :discount_applied, payment_mode = :payment_mode, created_at=:created_at where id = :id';
-        }
-        else{
+                'update billing set customerId = :customerId, services = :services, products = :products, totalamount = :totalamount, service_total=:service_total, product_total=:product_total, discount_applied = :discount_applied, payment_mode = :payment_mode, created_at=:created_at where id = :id';
+        } else {
             $updateBillingSql =
-            'update billing set customerId = :customerId, services = :services, products = :products, totalamount = :totalamount, service_total=:service_total, product_total=:product_total, discount_applied = :discount_applied, payment_mode = :payment_mode where id = :id';
+                'update billing set customerId = :customerId, services = :services, products = :products, totalamount = :totalamount, service_total=:service_total, product_total=:product_total, discount_applied = :discount_applied, payment_mode = :payment_mode where id = :id';
         }
-        
+
         $stmtInsert = $db->prepare($updateBillingSql);
 
         $stmtInsert->bindParam('customerId', $customerId, PDO::PARAM_STR);
@@ -534,8 +533,12 @@ $app->put('/edit/bill', function (
         } else {
             $stmtInsert->bindValue('products', '', PDO::PARAM_STR);
         }
-        if($body['created_at']){
-            $stmtInsert->bindParam('created_at', $body['created_at'], PDO::PARAM_STR);
+        if ($body['created_at']) {
+            $stmtInsert->bindParam(
+                'created_at',
+                $body['created_at'],
+                PDO::PARAM_STR
+            );
         }
         $stmtInsert->bindParam(
             'totalamount',
@@ -674,20 +677,23 @@ $app->post('/add/bill', function (
     }
 
     if ($isValid) {
-        if($body['created_at']){
+        if ($body['created_at']) {
             $insertSql =
-            'insert into billing(customerId, services, products, totalamount, service_total, product_total, discount_applied, payment_mode, created_at)values(:customerId, :services, :products, :totalamount, :service_total, :product_total, :discount_applied, :payment_mode, :created_at)';
-        }
-        else{
+                'insert into billing(customerId, services, products, totalamount, service_total, product_total, discount_applied, payment_mode, created_at)values(:customerId, :services, :products, :totalamount, :service_total, :product_total, :discount_applied, :payment_mode, :created_at)';
+        } else {
             $insertSql =
-            'insert into billing(customerId, services, products, totalamount, service_total, product_total, discount_applied, payment_mode)values(:customerId, :services, :products, :totalamount, :service_total, :product_total, :discount_applied, :payment_mode)';
+                'insert into billing(customerId, services, products, totalamount, service_total, product_total, discount_applied, payment_mode)values(:customerId, :services, :products, :totalamount, :service_total, :product_total, :discount_applied, :payment_mode)';
         }
-        
+
         $stmtInsert = $db->prepare($insertSql);
         $stmtInsert->bindParam('customerId', $customerId, PDO::PARAM_STR);
         $stmtInsert->bindParam('services', $body['services'], PDO::PARAM_STR);
-        if($body['created_at']){
-            $stmtInsert->bindParam('created_at', $body['created_at'], PDO::PARAM_STR);
+        if ($body['created_at']) {
+            $stmtInsert->bindParam(
+                'created_at',
+                $body['created_at'],
+                PDO::PARAM_STR
+            );
         }
         if (count($products) > 0) {
             $stmtInsert->bindParam(
@@ -1476,11 +1482,8 @@ $app->get('/get/summary', function (
             (float) $summary->total - (float) $expenses->totalexpense;
     }
 
-    if($expenses){
-        $expenses->month = date(
-            'F',
-            mktime(0, 0, 0, $expenses->month, 10)
-        );
+    if ($expenses) {
+        $expenses->month = date('F', mktime(0, 0, 0, $expenses->month, 10));
     }
 
     $serArr = [];
@@ -1609,11 +1612,8 @@ $app->get('/get/summary/{month}/{year}', function (
             (float) $summary->total - (float) $expenses->totalexpense;
     }
 
-    if($expenses){
-        $expenses->month = date(
-            'F',
-            mktime(0, 0, 0, $expenses->month, 10)
-        );
+    if ($expenses) {
+        $expenses->month = date('F', mktime(0, 0, 0, $expenses->month, 10));
     }
 
     $serArr = [];
@@ -1683,7 +1683,11 @@ $app->get('/get/summary/{month}/{year}', function (
             'emp_data' => $empWiseServices,
         ];
     } else {
-        $response = ['status' => false, 'expenses' => $expenses, 'message' => "Summary doesn't exist"];
+        $response = [
+            'status' => false,
+            'expenses' => $expenses,
+            'message' => "Summary doesn't exist",
+        ];
     }
 
     echo json_encode($response);
@@ -1725,11 +1729,8 @@ $app->post('/get/summary/date', function (
             (float) $summary->total - (float) $expenses->totalexpense;
     }
 
-    if($expenses){
-        $expenses->month = date(
-            'F',
-            mktime(0, 0, 0, $expenses->month, 10)
-        );
+    if ($expenses) {
+        $expenses->month = date('F', mktime(0, 0, 0, $expenses->month, 10));
     }
     $serArr = [];
     $empWiseServices = [];
@@ -1800,7 +1801,11 @@ $app->post('/get/summary/date', function (
             'emp_data' => $empWiseServices,
         ];
     } else {
-        $response = ['status' => false, 'expenses' => $expenses, 'message' => "Summary doesn't exist"];
+        $response = [
+            'status' => false,
+            'expenses' => $expenses,
+            'message' => "Summary doesn't exist",
+        ];
     }
 
     echo json_encode($response);
