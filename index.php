@@ -1,4 +1,5 @@
 <?php
+
 use Psr\Http\Message\ServerRequestInterface as Request;
 use Psr\Http\Message\ResponseInterface as Response;
 
@@ -484,7 +485,7 @@ $app->put('/edit/bill', function (
             $response = [
                 'status' => false,
                 'message' =>
-                    'Total number of ' .
+                'Total number of ' .
                     $v->product_used->product_name .
                     ' in stock is ' .
                     $v->product_used->quantity .
@@ -514,10 +515,10 @@ $app->put('/edit/bill', function (
     if ($isValid) {
         if ($body['created_at']) {
             $updateBillingSql =
-                'update billing set customerId = :customerId, services = :services, products = :products, totalamount = :totalamount, service_total=:service_total, product_total=:product_total, discount_applied = :discount_applied, payment_mode = :payment_mode, created_at=:created_at where id = :id';
+                'update billing set customerId = :customerId, services = :services, products = :products, totalamount = :totalamount, service_total=:service_total, product_total=:product_total, discount_applied = :discount_applied, payment_mode = :payment_mode, product_discount=:product_discount, created_at=:created_at where id = :id';
         } else {
             $updateBillingSql =
-                'update billing set customerId = :customerId, services = :services, products = :products, totalamount = :totalamount, service_total=:service_total, product_total=:product_total, discount_applied = :discount_applied, payment_mode = :payment_mode where id = :id';
+                'update billing set customerId = :customerId, services = :services, products = :products, totalamount = :totalamount, service_total=:service_total, product_total=:product_total, discount_applied = :discount_applied, payment_mode = :payment_mode, product_discount=:product_discount where id = :id';
         }
 
         $stmtInsert = $db->prepare($updateBillingSql);
@@ -555,6 +556,13 @@ $app->put('/edit/bill', function (
             $body['product_total'],
             PDO::PARAM_STR
         );
+
+        $stmtInsert->bindParam(
+            'product_discount',
+            $body['product_discount'],
+            PDO::PARAM_STR
+        );
+
         $stmtInsert->bindParam(
             'discount_applied',
             $body['discount_applied'],
@@ -649,7 +657,7 @@ $app->post('/add/bill', function (
             $response = [
                 'status' => false,
                 'message' =>
-                    'Total number of ' .
+                'Total number of ' .
                     $v->product_used->product_name .
                     ' in stock is ' .
                     $v->product_used->quantity .
@@ -679,10 +687,10 @@ $app->post('/add/bill', function (
     if ($isValid) {
         if ($body['created_at']) {
             $insertSql =
-                'insert into billing(customerId, services, products, totalamount, service_total, product_total, discount_applied, payment_mode, created_at)values(:customerId, :services, :products, :totalamount, :service_total, :product_total, :discount_applied, :payment_mode, :created_at)';
+                'insert into billing(customerId, services, products, totalamount, service_total, product_total, discount_applied, product_discount, payment_mode, created_at)values(:customerId, :services, :products, :totalamount, :service_total, :product_total, :discount_applied, :product_discount, :payment_mode, :created_at)';
         } else {
             $insertSql =
-                'insert into billing(customerId, services, products, totalamount, service_total, product_total, discount_applied, payment_mode)values(:customerId, :services, :products, :totalamount, :service_total, :product_total, :discount_applied, :payment_mode)';
+                'insert into billing(customerId, services, products, totalamount, service_total, product_total, discount_applied, product_discount, payment_mode)values(:customerId, :services, :products, :totalamount, :service_total, :product_total, :discount_applied, :product_discount, :payment_mode)';
         }
 
         $stmtInsert = $db->prepare($insertSql);
@@ -708,6 +716,8 @@ $app->post('/add/bill', function (
         $service_total =
             (int) $body['service_total'] - (int) $body['discount_applied'];
 
+        $product_total = (int) $body['product_total'] - (int) $body['product_discount'];
+
         $stmtInsert->bindParam(
             'totalamount',
             $body['totalamount'],
@@ -716,9 +726,16 @@ $app->post('/add/bill', function (
         $stmtInsert->bindParam('service_total', $service_total, PDO::PARAM_STR);
         $stmtInsert->bindParam(
             'product_total',
-            $body['product_total'],
+            $product_total,
             PDO::PARAM_STR
         );
+
+        $stmtInsert->bindParam(
+            'product_discount',
+            $body['product_discount'],
+            PDO::PARAM_STR
+        );
+
         $stmtInsert->bindParam(
             'discount_applied',
             $body['discount_applied'],
@@ -1447,7 +1464,7 @@ $app->get('/get/summary', function (
 ) {
     $db = getDB();
 
-    $sql = "select year(created_at) as current_year,month(created_at) as current_month,sum(totalamount) as total, sum(service_total) as service_total, sum(product_total) as product_total, sum(discount_applied) as total_discount
+    $sql = "select year(created_at) as current_year,month(created_at) as current_month,sum(totalamount) as total, sum(service_total) as service_total, sum(product_total) as product_total, sum(discount_applied) as total_discount, sum(product_discount) as total_product_discount
     from billing where year(created_at)=:year and month(created_at)=:month
     group by year(created_at),month(created_at)
     order by year(created_at),month(created_at)";
@@ -1573,7 +1590,7 @@ $app->get('/get/summary/{month}/{year}', function (
     array $args
 ) {
     $db = getDB();
-    $sql = "select year(created_at) as current_year,month(created_at) as current_month,sum(totalamount) as total, sum(service_total) as service_total, sum(product_total) as product_total, sum(discount_applied) as total_discount
+    $sql = "select year(created_at) as current_year,month(created_at) as current_month,sum(totalamount) as total, sum(service_total) as service_total, sum(product_total) as product_total, sum(discount_applied) as total_discount, sum(product_discount) as total_product_discount
     from billing where year(created_at)=:year and month(created_at)=:month
     group by year(created_at),month(created_at)
     order by year(created_at),month(created_at)";
@@ -1702,7 +1719,7 @@ $app->post('/get/summary/date', function (
     $db = getDB();
 
     $sql =
-        'select t1.*, year(t1.date_selected) as current_year, month(t1.date_selected) as current_month from (select sum(totalamount) as total, sum(discount_applied) as total_discount, sum(service_total) as service_total, sum(product_total) as product_total, date(created_at) as date_selected from billing where date(created_at)=:date group by date(created_at) order by date(created_at) desc) t1';
+        'select t1.*, year(t1.date_selected) as current_year, month(t1.date_selected) as current_month from (select sum(totalamount) as total, sum(discount_applied) as total_discount, sum(service_total) as service_total, sum(product_total) as product_total, sum(product_discount) as total_product_discount, date(created_at) as date_selected from billing where date(created_at)=:date group by date(created_at) order by date(created_at) desc) t1';
     $stmt = $db->prepare($sql);
     $stmt->bindParam('date', $body['date'], PDO::PARAM_STR);
     $stmt->execute();
@@ -1737,6 +1754,7 @@ $app->post('/get/summary/date', function (
     foreach ($services as $key => $value) {
         $serArr[] = json_decode($value->services);
     }
+
     $summary->current_month = date(
         'F',
         mktime(0, 0, 0, $summary->current_month, 10)
